@@ -1,0 +1,119 @@
+<!DOCTYPE html><html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GDG Weather App</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(to right, #74ebd5, #acb6e5);
+    transition: background 1s;
+  }
+  .app {
+    background: rgba(255,255,255,0.3);
+    padding: 2rem;
+    border-radius: 15px;
+    text-align: center;
+    width: 90%;
+    max-width: 400px;
+  }
+  input, button {
+    padding: 10px;
+    margin: 5px;
+    border-radius: 8px;
+    border: none;
+  }
+  button {
+    background-color: #007BFF;
+    color: white;
+    cursor: pointer;
+  }
+  .weather-card {
+    margin-top: 20px;
+    background: rgba(255,255,255,0.2);
+    padding: 1rem;
+    border-radius: 10px;
+  }
+  .toggle {
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>🌤️ Weather App</h1>
+  <input type="text" id="cityInput" placeholder="Enter city">
+  <button id="searchBtn">Search</button>
+  <div class="toggle">
+    <label>
+      <input type="checkbox" id="unitToggle"> Show Fahrenheit
+    </label>
+  </div>
+  <div class="weather-card">
+    <h2 id="cityName">--</h2>
+    <p id="temp">--°C</p>
+    <p id="condition">--</p>
+    <p id="humidity">Humidity: --%</p>
+    <img id="icon" src="" alt="" style="width:80px;height:80px;">
+  </div>
+</div><script>
+const apiKey = "dea83ad485a2082eaec39fdef76fd9d2"; // Your API key
+const cityInput = document.getElementById('cityInput');
+const searchBtn = document.getElementById('searchBtn');
+const unitToggle = document.getElementById('unitToggle');
+const cityName = document.getElementById('cityName');
+const temp = document.getElementById('temp');
+const condition = document.getElementById('condition');
+const humidity = document.getElementById('humidity');
+const iconEl = document.getElementById('icon');
+
+async function getWeather(city) {
+  try {
+    const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric`);
+    const data = await res.json();
+    if (data.cod !== 200) { alert(data.message); return; }
+
+    cityName.textContent = data.name + ", " + data.sys.country;
+    temp.textContent = data.main.temp.toFixed(1) + "°C";
+    humidity.textContent = "Humidity: " + data.main.humidity + "%";
+    condition.textContent = data.weather[0].description;
+    iconEl.src = `http://openweathermap.org/img/wn/${data.weather[0].icon}@2x.png`;
+
+    const main = data.weather[0].main.toLowerCase();
+    if(main.includes("cloud")) document.body.style.background = "linear-gradient(to right, #cfd9df, #e2ebf0)";
+    else if(main.includes("rain")) document.body.style.background = "linear-gradient(to right, #667db6, #0082c8)";
+    else if(main.includes("thunder")) document.body.style.background = "linear-gradient(to right, #232526, #414345)";
+    else if(main.includes("snow")) document.body.style.background = "linear-gradient(to right, #83a4d4, #b6fbff)";
+    else document.body.style.background = "linear-gradient(to right, #74ebd5, #acb6e5)";
+
+    localStorage.setItem("lastCity", city);
+  } catch (e) {
+    alert("Error fetching weather");
+    console.error(e);
+  }
+}
+
+searchBtn.addEventListener("click", () => {
+  const city = cityInput.value.trim();
+  if(city) getWeather(city);
+});
+
+unitToggle.addEventListener("change", () => {
+  if(temp.textContent.includes("°")){
+    let value = parseFloat(temp.textContent);
+    if(unitToggle.checked) temp.textContent = ((value * 9/5) + 32).toFixed(1) + "°F";
+    else temp.textContent = ((value -32)*5/9).toFixed(1) + "°C";
+  }
+});
+
+window.onload = () => {
+  const lastCity = localStorage.getItem("lastCity");
+  if(lastCity) getWeather(lastCity);
+};
+</script></body>
+</html>
