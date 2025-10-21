@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cloth Cutting — Billing</title>
+
+  <!-- Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/decimal.js/10.4.3/decimal.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+  <style>
+    :root{
+      --bg:#f6f8fb; --card:#fff; --accent:#2a7bf6; --muted:#6b7280; --danger:#ef4444;
+      --radius:12px; --shadow:0 6px 18px rgba(18,38,63,0.08);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+      background:linear-gradient(180deg,#f8fbff 0%, var(--bg) 100%); color:#0f172a; padding:20px;
+    }
+
+    .container{max-width:980px;margin:0 auto}
+    .top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px}
+    h1{font-size:20px;margin:0}
+    .card{background:var(--card);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)}
+
+    .form-grid{display:grid;grid-template-columns:1fr 110px 90px;gap:8px}
+    input, select{padding:10px;border-radius:8px;border:1px solid #e6e9ef;font-size:14px}
+    input[type=number]{-moz-appearance:textfield}
+    input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+
+    .btn{display:inline-block;padding:9px 12px;border-radius:10px;border:none;background:var(--accent);color:white;font-weight:600;cursor:pointer}
+    .btn.ghost{background:transparent;color:var(--accent);border:1px solid rgba(42,123,246,0.12)}
+    .btn.danger{background:var(--danger)}
+
+    .items{margin-top:12px}
+    .items-list{display:grid;gap:8px}
+    .item-row{display:grid;grid-template-columns: 1fr 90px 70px 90px 40px;gap:8px;padding:8px;border-radius:8px;background:linear-gradient(180deg,#fff,#fbfdff);align-items:center;border:1px solid #eef2f7}
+    .item-row small{display:block;color:var(--muted);font-size:12px}
+
+    .summary{margin-top:14px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+    .summary .meta{flex:1}
+    .summary .meta label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+    .summary .meta input{width:220px}
+
+    .totals{min-width:260px;padding:10px;border-radius:10px;background:linear-gradient(180deg,#fff,#f7fbff);border:1px solid #e6eefc}
+    .totals .row{display:flex;justify-content:space-between;padding:6px 0;color:#0b1220}
+    .totals .muted{color:var(--muted);font-size:13px}
+    .totals .big{font-weight:700;font-size:18px}
+
+    .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .small{font-size:13px;padding:6px 8px}
+
+    /* Responsive */
+    @media (max-width:720px){
+      .form-grid{grid-template-columns:1fr 90px 80px}
+      .item-row{grid-template-columns:1fr 80px 60px 80px 36px}
+      .summary{flex-direction:column}
+      .totals{width:100%}
+    }
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="top">
+      <h1>Cloth Cutting — Billing</h1>
+      <div style="color:var(--muted);font-size:13px">Autosave · Works offline · Export PDF/CSV</div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <div style="flex:1">
+          <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:6px">Customer / Order</label>
+          <input id="customer" placeholder="Customer name or order note" />
+        </div>
+        <div style="width:170px">
+          <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:6px">Invoice #</label>
+          <input id="invoice" placeholder="Auto" />
+        </div>
+        <div style="width:170px">
+          <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:6px">Date</label>
+          <input id="date" type="date" />
+        </div>
+      </div>
+
+      <div style="margin-top:6px"> 
+        <div class="form-grid">
+          <input id="styleName" placeholder="Style name (e.g., Shadab Fancy)" />
+          <input id="unitPrice" type="number" placeholder="Price (₹)" />
+          <input id="qty" type="number" placeholder="Qty" />
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn" id="addBtn">➕ Add Item</button>
+          <button class="btn ghost" id="clearBtn">Clear Items</button>
+          <button class="btn ghost" id="loadSample">Load Sample</button>
+        </div>
+
+        <div class="items">
+          <div class="items-list card" id="itemsList" style="margin-top:10px;padding:10px"></div>
+        </div>
+
+        <div class="summary">
+          <div class="meta">
+            <label>Apply discount (₹ or %)</label>
+            <div style="display:flex;gap:8px">
+              <input id="discountVal" placeholder="0" />
+              <select id="discountType"><option value="flat">₹ Flat</option><option value="percent">% Percent</option></select>
+            </div>
+
+            <label style="margin-top:8px">Tax (GST/other) %</label>
+            <input id="taxPct" placeholder="0" />
+
+            <label style="margin-top:8px">Notes (printed on bill)</label>
+            <input id="notes" placeholder="Ex: Deliver in 3 days, handle with care" />
+          </div>
+
+          <div class="totals">
+            <div class="row"><div class="muted">Subtotal</div><div id="subtotal" class="muted">₹0.00</div></div>
+            <div class="row"><div class="muted">Discount</div><div id="discountOut" class="muted">- ₹0.00</div></div>
+            <div class="row"><div class="muted">Tax</div><div id="taxOut" class="muted">₹0.00</div></div>
+            <div style="height:1px;background:#eef2f7;margin:8px 0"></div>
+            <div class="row big"><div>Total</div><div id="grandTotal" class="big">₹0.00</div></div>
+            <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn small" id="pdfBtn">📄 Download PDF</button>
+              <button class="btn ghost small" id="csvBtn">⬇️ Export CSV</button>
+              <button class="btn ghost small" id="printBtn">🖨️ Print</button>
+              <button class="btn ghost small" id="copyBtn">📋 Copy</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+          <button class="btn ghost small" id="saveBtn">Save locally</button>
+          <button class="btn ghost small" id="resetAll">Reset All</button>
+          <div style="color:var(--muted);font-size:13px;margin-left:auto">Auto-saves to browser storage</div>
+        </div>
+
+      </div>
+    </div>
+
+    <footer style="text-align:center;margin-top:12px;color:var(--muted);font-size:13px">Made for cloth cutting businesses — simple, fast, and offline-ready</footer>
+  </div>
+
+<script>
+  // App state
+  const items = [];
+  const STORAGE_KEY = 'cloth_cut_bill_v1';
+
+  // Elements
+  const el = id => document.getElementById(id);
+  const itemsList = el('itemsList');
+  const invoice = el('invoice');
+  const dateInput = el('date');
+
+  // Init
+  function uid(){return 'INV-'+Math.random().toString(36).slice(2,9).toUpperCase()}
+  dateInput.valueAsDate = new Date();
+  invoice.placeholder = uid();
+
+  // Helpers
+  function money(d){
+    const dec = new Decimal(d || 0).toDecimalPlaces(2);
+    return '₹' + dec.toFixed(2);
+  }
+
+  function saveState(){
+    const data = {items, meta:{customer:el('customer').value, invoice:invoice.value||invoice.placeholder, date:dateInput.value, discountVal:el('discountVal').value, discountType:el('discountType').value, taxPct:el('taxPct').value, notes:el('notes').value}};
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+
+  function loadState(){
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return;
+    try{
+      const parsed = JSON.parse(raw);
+      if(parsed.items && Array.isArray(parsed.items)){
+        parsed.items.forEach(it=>items.push({style:it.style, price:it.price, qty:it.qty}));
+        el('customer').value = parsed.meta.customer || '';
+        invoice.value = parsed.meta.invoice || '';
+        dateInput.value = parsed.meta.date || dateInput.value;
+        el('discountVal').value = parsed.meta.discountVal || '';
+        el('discountType').value = parsed.meta.discountType || 'flat';
+        el('taxPct').value = parsed.meta.taxPct || '';
+        el('notes').value = parsed.meta.notes || '';
+        render();
+      }
+    }catch(e){console.warn('load failed', e)}
+  }
+
+  function addItem(){
+    const style = el('styleName').value.trim();
+    const price = el('unitPrice').value.trim();
+    const qty = el('qty').value.trim();
+    if(!style || !price || Number(price)<=0 || !qty || Number(qty)<=0){
+      alert('Enter valid style, price and quantity.');
+      return;
+    }
+    items.push({style, price: new Decimal(price).toString(), qty: new Decimal(qty).toString() });
+    el('styleName').value=''; el('unitPrice').value=''; el('qty').value='';
+    render(); saveState();
+  }
+
+  function removeItem(i){ items.splice(i,1); render(); saveState(); }
+  function editItem(i){
+    const it = items[i];
+    const newStyle = prompt('Style name', it.style); if(newStyle===null) return;
+    const newPrice = prompt('Unit price', it.price); if(newPrice===null) return;
+    const newQty = prompt('Qty', it.qty); if(newQty===null) return;
+    if(!newStyle.trim() || Number(newPrice)<=0 || Number(newQty)<=0){ alert('Invalid values.'); return; }
+    items[i] = {style:newStyle.trim(), price:new Decimal(newPrice).toString(), qty:new Decimal(newQty).toString()};
+    render(); saveState();
+  }
+
+  function clearItems(){ if(confirm('Clear all items?')){ items.splice(0); render(); saveState(); } }
+  function resetAll(){ if(confirm('Reset everything (clears saved data)?')){ localStorage.removeItem(STORAGE_KEY); location.reload(); } }
+
+  function calcTotals(){
+    let subtotal = new Decimal(0);
+    items.forEach(it=>{
+      const p = new Decimal(it.price);
+      const q = new Decimal(it.qty);
+      subtotal = subtotal.add(p.mul(q));
+    });
+    // discount
+    let discount = new Decimal(0);
+    const dValRaw = el('discountVal').value.trim();
+    const dType = el('discountType').value;
+    if(dValRaw !== ''){
+      const dVal = new Decimal(dValRaw||0);
+      if(dType==='flat') discount = dVal;
+      else discount = subtotal.mul(dVal.div(100));
+    }
+    if(discount.greaterThan(subtotal)) discount = subtotal;
+
+    // tax
+    const taxPct = new Decimal(el('taxPct').value||0);
+    const taxable = subtotal.minus(discount);
+    const tax = taxable.mul(taxPct.div(100));
+
+    const grand = taxable.plus(tax);
+    return {subtotal, discount, tax, grand};
+  }
+
+  function render(){
+    itemsList.innerHTML = '';
+    if(items.length===0){ itemsList.innerHTML = '<div style="color:var(--muted);padding:14px;text-align:center">No items yet — add items to build the bill.</div>'; updateTotals(); return; }
+
+    items.forEach((it,idx)=>{
+      const row = document.createElement('div'); row.className='item-row';
+      row.innerHTML = `
+        <div>
+          <strong>${idx+1}. ${escapeHtml(it.style)}</strong>
+          <small>₹${new Decimal(it.price).toFixed(2)} x ${new Decimal(it.qty).toFixed(2)} = ₹${new Decimal(it.price).mul(new Decimal(it.qty)).toFixed(2)}</small>
+        </div>
+        <div style="text-align:center">${money(new Decimal(it.price))}</div>
+        <div style="text-align:center">${new Decimal(it.qty).toFixed(2)}</div>
+        <div style="text-align:center">${money(new Decimal(it.price).mul(new Decimal(it.qty)))}</div>
+        <div style="text-align:right">
+          <button class="btn ghost small" onclick="editItem(${idx})">✏️</button>
+          <button class="btn danger small" onclick="removeItem(${idx})" style="margin-left:6px">🗑️</button>
+        </div>
+      `;
+      itemsList.appendChild(row);
+    });
+    updateTotals();
+  }
+
+  function updateTotals(){
+    const t = calcTotals();
+    el('subtotal').innerText = money(t.subtotal);
+    el('discountOut').innerText = '- ' + money(t.discount);
+    el('taxOut').innerText = money(t.tax);
+    el('grandTotal').innerText = money(t.grand);
+  }
+
+  // Exports
+  function exportCSV(){
+    if(items.length===0){ alert('No items to export'); return; }
+    const rows = [['Style','Unit Price','Qty','Total']];
+    items.forEach(it=> rows.push([it.style, new Decimal(it.price).toFixed(2), new Decimal(it.qty).toFixed(2), new Decimal(it.price).mul(new Decimal(it.qty)).toFixed(2)]));
+    const t = calcTotals();
+    rows.push([]); rows.push(['Subtotal', '', '', t.subtotal.toFixed(2)]);
+    rows.push(['Discount', '', '', t.discount.toFixed(2)]);
+    rows.push(['Tax', '', '', t.tax.toFixed(2)]);
+    rows.push(['Total', '', '', t.grand.toFixed(2)]);
+
+    const csv = rows.map(r=> r.map(c=> '"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = (invoice.value||invoice.placeholder)+'_bill.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+
+  function copyToClipboard(){
+    const t = calcTotals();
+    let text = `Invoice: ${invoice.value||invoice.placeholder}\nDate: ${dateInput.value}\nCustomer: ${el('customer').value}\n\n`;
+    items.forEach((it,idx)=> text += `${idx+1}. ${it.style} — ₹${new Decimal(it.price).toFixed(2)} x ${new Decimal(it.qty).toFixed(2)} = ₹${new Decimal(it.price).mul(new Decimal(it.qty)).toFixed(2)}\n`);
+    text += `\nSubtotal: ₹${t.subtotal.toFixed(2)}\nDiscount: -₹${t.discount.toFixed(2)}\nTax: ₹${t.tax.toFixed(2)}\nTotal: ₹${t.grand.toFixed(2)}\n`;
+    navigator.clipboard.writeText(text).then(()=> alert('Copied to clipboard'));
+  }
+
+  async function downloadPDF(){
+    if(items.length===0){ alert('No items to print'); return; }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({unit:'pt',format:'A5',orientation:'portrait'});
+    doc.setFontSize(12);
+    const left = 40; let y = 40;
+    doc.text('Cloth Cutting Bill', 210, y, {align:'center'}); y+=20;
+    doc.setFontSize(10);
+    doc.text(`Invoice: ${invoice.value||invoice.placeholder}`, left, y); doc.text(`Date: ${dateInput.value}`, 420, y); y+=14;
+    doc.text(`Customer: ${el('customer').value}`, left, y); y+=18;
+
+    const tableBody = items.map(it=>{
+      const p = new Decimal(it.price);
+      const q = new Decimal(it.qty);
+      const total = p.mul(q);
+      return [it.style, p.toFixed(2), q.toFixed(2), total.toFixed(2)];
+    });
+
+    doc.autoTable({
+      startY: y,
+      head:[['Style','Unit Price','Qty','Total']],
+      body: tableBody,
+      styles:{fontSize:9},
+      headStyles:{fillColor:[42,123,246],textColor:255}
+    });
+
+    const t = calcTotals();
+    const finalY = doc.autoTable.previous.finalY + 10;
+    doc.text(`Notes: ${el('notes').value}`, left, finalY + 6);
+    doc.autoTable({
+      startY: finalY + 20,
+      body: [['Subtotal','', '', t.subtotal.toFixed(2)], ['Discount','','', '-'+t.discount.toFixed(2)], ['Tax','','', t.tax.toFixed(2)], ['Total','','', t.grand.toFixed(2)]],
+      theme:'plain',
+      styles:{fontSize:10}
+    });
+
+    doc.save((invoice.value||invoice.placeholder)+'_ClothBill.pdf');
+  }
+
+  // Utils
+  function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // Event bindings
+  el('addBtn').addEventListener('click', addItem);
+  el('clearBtn').addEventListener('click', clearItems);
+  el('pdfBtn').addEventListener('click', downloadPDF);
+  el('csvBtn').addEventListener('click', exportCSV);
+  el('copyBtn').addEventListener('click', copyToClipboard);
+  el('printBtn').addEventListener('click', ()=>{ window.print(); });
+  el('saveBtn').addEventListener('click', ()=>{ saveState(); alert('Saved locally'); });
+  el('resetAll').addEventListener('click', resetAll);
+  el('loadSample').addEventListener('click', ()=>{
+    if(confirm('Load sample items? This will add items to current list.')){
+      items.push({style:'Shadab Fancy', price:'150', qty:'2'});
+      items.push({style:'Kurta Stitch', price:'200', qty:'1.5'});
+      render(); saveState();
+    }
+  });
+
+  // Live updates for totals
+  ['discountVal','discountType','taxPct','notes','customer','invoice','date'].forEach(id=> el(id).addEventListener('input', ()=>{ updateTotals(); saveState(); }));
+
+  // Auto-save every 5 seconds if changes
+  setInterval(()=> saveState(), 5000);
+
+  // Expose some functions to global for inline handlers
+  window.removeItem = removeItem; window.editItem = editItem; window.money = money; window.exportCSV = exportCSV;
+
+  // Load saved state
+  loadState();
+
+  // First render
+  render();
+</script>
+</body>
+</html>
